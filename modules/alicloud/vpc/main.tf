@@ -1,5 +1,8 @@
 locals {
   prefix = "${var.prefix}-"
+  vswitches_by_zone_cidr = {
+    for vswitch in var.vswitch : "${vswitch.zone}/${vswitch.cidr}" => vswitch
+  }
 }
 
 resource "alicloud_vpc" "vpc" {
@@ -11,12 +14,12 @@ resource "alicloud_vpc" "vpc" {
 }
 
 resource "alicloud_vswitch" "vswitch" {
-  count        = length(var.vswitch)
-  vswitch_name = var.vswitch[count.index].name != "" ? var.vswitch[count.index].name : "${local.prefix}vswitch-${var.vswitch[count.index].zone}-${var.vswitch[count.index].cidr}"
-  description  = var.vswitch[count.index].description
-  cidr_block   = var.vswitch[count.index].cidr
+  for_each     = local.vswitches_by_zone_cidr
+  vswitch_name = each.value.name != "" ? each.value.name : "${local.prefix}vswitch-${each.value.zone}-${each.value.cidr}"
+  description  = each.value.description
+  cidr_block   = each.value.cidr
   vpc_id       = alicloud_vpc.vpc.id
-  zone_id      = var.vswitch[count.index].zone
+  zone_id      = each.value.zone
   tags         = var.tags
 }
 

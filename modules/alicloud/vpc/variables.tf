@@ -60,11 +60,15 @@ variable "vswitch" {
     ]
     ```
   EOF
+  validation {
+    condition     = length(distinct([for vswitch in var.vswitch : "${vswitch.zone}/${vswitch.cidr}"])) == length(var.vswitch)
+    error_message = "Each VSwitch must have a unique zone and CIDR combination."
+  }
 }
 
 variable "security_group" {
   type = object({
-    name = optional(string, "")
+    name        = optional(string, "")
     description = optional(string, "")
     rules = optional(list(object({
       type        = string
@@ -91,7 +95,7 @@ variable "security_group" {
         - policy : (Optional | string | default:"accept") Rule policy. Valid values: accept, drop.
         - port_range : (Optional | string | default:"-1/-1") Rule port range. The range of port numbers relevant to the IP protocol. 
         - priority : (Optional | number | default:1) Rule priority. Valid values: 1 to 100.
-        - cidr_ip : (Optional | string | default:"0.0.0.0/0") Rule CIDR IP. The target IP address range.
+        - cidr_ip : (Optional | string | default:"0.0.0.0/0") IPv4 CIDR block for the rule.
     Example:
     ```
     security_group = {
@@ -139,7 +143,7 @@ variable "resource_group_id" {
 }
 
 variable "tags" {
-  description = "All the resources will be tagged with this map"
+  description = "Tags to apply to supported resources."
   type        = map(string)
   default     = {}
 }

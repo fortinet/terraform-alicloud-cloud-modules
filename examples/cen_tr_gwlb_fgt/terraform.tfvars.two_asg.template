@@ -1,0 +1,197 @@
+# Project Instructions
+# fortinetdev/cloud-modules/alicloud//examples/cen_tr_gwlb_fgt
+
+# [Apply Instructions]
+# 1. Open the example directory and run terraform init.
+# 2. Copy this template to terraform.tfvars and configure authentication and deployment settings.
+#    Omit business_vpcs from the first deployment.
+# 3. Run terraform plan and terraform apply to deploy the security infrastructure first.
+# 4. Wait for FortiGate initialization and licensing, verify its policies and routes.
+# 5. Add business_vpcs, then run terraform plan and terraform apply again.
+#
+# [Destroy Instructions]
+# 1. Set business_vpcs = {}, then run terraform plan and terraform apply.
+#    Workload VSwitches automatically return to the system route table.
+#    If they previously used another custom route table, restore that association.
+# 2. In every fortigate_asgs entry, set autoscaler.min_instances, autoscaler.max_instances,
+#    and autoscaler.desired_capacity to 0, then run terraform apply to remove FortiGate instances.
+# 3. Wait for all FortiGate instances to be removed and cleanup to finish,
+#    then run terraform destroy and confirm removal of the remaining resources.
+# 4. Errors such as "DeleteVSwitch Failed" or "DeleteSecurityGroup Failed" may
+#    occur. This is due to Alibaba Cloud's ongoing cleanup of Function Compute
+#    ENIs, which is outside this project's control. Wait approximately 10 to 20 minutes,
+#    then run terraform destroy again.
+
+# [Authentication]
+# Option 1: Set your Alibaba Cloud access key ID and secret below.
+# access_key = "<YOUR-ACCESS-KEY>"
+# secret_key = "<YOUR-SECRET-KEY>"
+
+# Option 2 (recommended): Set the following environment variables:
+# ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET.
+
+# [Project Settings]
+region = "ap-northeast-1"  # Alibaba Cloud region where resources are deployed.
+prefix = "cen-tr-gwlb"     # Resource name prefix.
+# outbound_bandwidth = 100 # Optional. Maximum outbound bandwidth in Mbps for each NAT EIP. Defaults to 10.
+# cen_id = "cen-xxxxxxxx"  # Optional. Existing CEN instance ID. Leave unset or empty to create a new CEN instance.
+
+# [FortiGate Settings]
+fgt_password        = ""            # The example generates one management password for every group.
+autoscale_psksecret = ""            # The example generates one autoscale pre-shared key for every group.
+fgt_network_mode    = "single-port" # "single-port" or "dual-port" for all groups.
+# ots_instance_name = "existing-ots-instance" # The example creates its shared table here; empty creates an instance too.
+
+# [Security VPC]
+# The Security VPC supports single-zone or multi-zone deployments.
+# Keep one zone entry for a single-zone deployment or multiple entries for a multi-zone deployment.
+security_vpc = {
+  cidr = "192.168.0.0/16"
+  zones = {
+    ap-northeast-1a = {
+      inspection_vswitch_cidr = "192.168.0.0/24"
+      tr_vswitch_cidr         = "192.168.1.0/24"
+      gwlbe_vswitch_cidr      = "192.168.2.0/24"
+      nat_vswitch_cidr        = "192.168.3.0/24"
+      # sync_vswitch_cidr     = "192.168.4.0/24" # Required when fgt_network_mode is "dual-port".
+    }
+    # Uncomment this block to deploy the Security VPC across multiple zones.
+    # ap-northeast-1c = {
+    #   inspection_vswitch_cidr = "192.168.10.0/24"
+    #   tr_vswitch_cidr         = "192.168.11.0/24"
+    #   gwlbe_vswitch_cidr      = "192.168.12.0/24"
+    #   nat_vswitch_cidr        = "192.168.13.0/24"
+    #   sync_vswitch_cidr       = "192.168.14.0/24" # Required when fgt_network_mode is "dual-port".
+    # }
+  }
+}
+
+security_attachment_appliance_mode_support = "enable" # Optional. Set to null to omit this option if the selected region or account does not support it.
+
+# [Business VPCs]
+# Recommended: leave business_vpcs omitted on the first apply (default: {}).
+# Uncomment the configuration below only after the security infrastructure is deployed and verified.
+# The name "security" is reserved for the Security VPC.
+# Each business VPC can use one or more zones, independently of the Security VPC's zone configuration.
+# business_vpcs = {
+#   business-a = {
+#     cidr                 = "10.10.0.0/16"
+#     vpc_id               = "vpc-xxxxxxxx"
+#     workload_vswitch_ids = ["vsw-workload-a", "vsw-workload-c"]
+#     tr_vswitches = {
+#       # Configure one VSwitch per zone for this business VPC's Transit Router attachment.
+#       # Set either cidr to create a VSwitch or vswitch_id to reuse one.
+#       ap-northeast-1a = {
+#         cidr = "10.10.2.0/24" # Create a TR attachment VSwitch in this business VPC and zone.
+#       }
+#       ap-northeast-1c = {
+#         vswitch_id = "vsw-tr-c" # Reuse a TR attachment VSwitch in this business VPC and zone.
+#       }
+#     }
+#   }
+#   # business-b = {
+#   #   cidr                  = "10.20.0.0/16"
+#   #   vpc_id                = "vpc-yyyyyyyy"
+#   #   workload_vswitch_ids = ["vsw-workload-b"]
+#   #   tr_vswitches = {
+#   #     ap-northeast-1a = { cidr = "10.20.2.0/24" }
+#   #   }
+#   # }
+# }
+
+# [FortiGate Auto Scaling Groups]
+# Both groups use the same table, management password, PSK, network, and GWLB.
+# File licenses are allocated and released within each group's own pool.
+# Each group with Function Compute enabled has its own Function, roles, messaging resources, and OSS bucket.
+# For fixed capacity, set enable_scaling = false and min_instances = max_instances = desired_capacity.
+fortigate_asgs = {
+  byol = {
+    # instance_type = "ecs.c7.large"
+    fgt_hostname      = "cen-tr-gwlb-byol"
+    fgt_has_public_ip = false # Recommended: set to false and manage FortiGate over the private network. Set to true only for debugging.
+    image = {
+      product_type = "FortiGate"
+      version      = "8.0"
+      license_type = "BYOL"
+    }
+    system_disk = { size = 40, category = "cloud_essd", performance_level = "PL1" }
+    data_disks  = [{ size = 100, category = "cloud_essd", performance_level = "PL1" }]
+    license = {
+      license_source      = "file"
+      license_file_folder = "/path/to/byol/licenses" # Supply at least two licenses for this fixed capacity.
+    }
+    autoscaler = {
+      enable_scaling   = false # Disable native CPU alarms and rules; keep lifecycle handling enabled.
+      min_instances    = 2     # Set all three capacity values to N for fixed capacity.
+      max_instances    = 2
+      desired_capacity = 2
+    }
+    function_compute = {
+      logging_level = "INFO"
+    }
+  }
+
+  payg = {
+    # instance_type = "ecs.c7.large"
+    fgt_hostname      = "cen-tr-gwlb-payg"
+    fgt_has_public_ip = false # Recommended: set to false and manage FortiGate over the private network. Set to true only for debugging.
+    image = {
+      product_type = "FortiGate"
+      version      = "8.0"
+      license_type = "PAYG"
+    }
+    system_disk = { size = 40, category = "cloud_essd", performance_level = "PL1" }
+    data_disks  = [{ size = 100, category = "cloud_essd", performance_level = "PL1" }]
+    license     = { license_source = "none" }
+    autoscaler = {
+      enable_scaling       = true
+      min_instances        = 1
+      max_instances        = 4
+      # desired_capacity     = 1
+      cooldown_period      = 300
+      cpu_utilization_high = 80
+      cpu_utilization_low  = 20
+      evaluation_count     = 3
+      evaluation_period    = 60
+    }
+    function_compute = {
+      logging_level = "INFO"
+    }
+  }
+}
+
+# PAYG keeps at least one instance so native CPU scaling can operate.
+# Leave desired_capacity unset to use ESS default behavior.
+# CPU alarms above monitor PAYG only. Traffic and fleet-wide CPU scaling are not implemented here.
+# Set payg.autoscaler.enable_scaling = false when an external controller takes over scaling.
+
+# [GWLB Health Checks]
+# All groups use the same server group and probe port.
+# health_check = { health_check_connect_port = 8008, connection_drain_enabled = true, connection_drain_timeout = 300 }
+
+# [FortiGate Configuration]
+# config_file = "./fgt-extra.conf"  # Additional FortiGate configuration file.
+
+# This is the default policy. It allows all inspected traffic for connectivity testing. Customize it before production use.
+config_script = <<EOF
+config firewall policy
+    edit 1000
+        set name "gwlb-traffic-inspection"
+        set srcintf "gwlb-inspection"
+        set dstintf "gwlb-inspection"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set schedule "always"
+        set service "ALL"
+        set logtraffic all
+    next
+end
+EOF
+
+
+# [Others]
+# resource_group_id = "rg-xxxxxxxx" # Alibaba Cloud resource group ID assigned to resources.
+# tags = {                          # Tags to apply to resources.
+#   Project = "cen-tr-gwlb"
+# }

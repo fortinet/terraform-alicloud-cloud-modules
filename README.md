@@ -1,4 +1,4 @@
-![Fortinet logo|](https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Fortinet_logo.svg/320px-Fortinet_logo.svg.png)
+<img src="https://upload.wikimedia.org/wikipedia/commons/6/62/Fortinet_logo.svg" alt="Fortinet LOGO" width="300" />
 
 ## Terraform modules for Fortinet VM products on AliCloud
 
@@ -12,6 +12,12 @@ Folder `modules` contains reusable modules for AliCloud configurations (Subfolde
 1. [generic_vm_standalone](https://github.com/fortinetdev/terraform-alicloud-cloud-modules/blob/main/docs/modules/generic_vm_standalone.md)
 
     This module can be used to deploy any Fortinet VM: FortiGate / FortiManager / FortiAnalyzer
+
+
+### Examples
+1. [cen_tr_gwlb_fgt](https://github.com/fortinetdev/terraform-alicloud-cloud-modules/blob/main/docs/modules/cen_tr_gwlb_fgt.md)
+
+    Deploy FortiGate Autoscale Group with CEN Transit Router and Gateway Load Balancer (GWLB) for outbound (north-south) and inter-VPC traffic (east-west) inspection.
 
 
 ## How to Use Examples/Modules:
